@@ -842,6 +842,9 @@ tr:hover td{background:#f7f9fc}
           <div class="filter-item"><label>主矿种</label><div class="multi-select" id="ms-commodity">
             <button class="ms-btn" onclick="toggleMS('ms-commodity')">全部 <span class="ms-count" id="ms-commodity-count"></span></button>
             <div class="ms-dropdown" id="ms-commodity-dd"></div></div></div>
+          <div class="filter-item"><label>资源量大小（同矿种内相对档位）</label><div class="multi-select" id="ms-rrclass">
+            <button class="ms-btn" onclick="toggleMS('ms-rrclass')">全部 <span class="ms-count" id="ms-rrclass-count"></span></button>
+            <div class="ms-dropdown" id="ms-rrclass-dd"></div></div></div>
           <div class="filter-item"><label>开发阶段</label><div class="multi-select" id="ms-stage">
             <button class="ms-btn" onclick="toggleMS('ms-stage')">全部 <span class="ms-count" id="ms-stage-count"></span></button>
             <div class="ms-dropdown" id="ms-stage-dd"></div></div></div>
@@ -974,7 +977,7 @@ function switchBasemap(t){map.removeLayer(basemaps[currentBasemap]);basemaps[t].
   document.querySelectorAll('.basemap-tab').forEach(b=>b.classList.toggle('active',b.textContent.includes({'light':'灰底','topo':'地形','satellite':'影像','contour':'自然地理'}[t])));}
 L.geoJSON(countryBorder,{style:{color:'#ffd24d',weight:1.3,fill:false,dashArray:'5 3'}}).addTo(map);
 
-const filters={state:new Set(),commodity:new Set(),stage:new Set(),status:new Set(),operator:new Set()};
+const filters={state:new Set(),commodity:new Set(),rrclass:new Set(),stage:new Set(),status:new Set(),operator:new Set()};
 const scopes=new Set(['Active']);
 function uniq(key){const s=new Set();projects.forEach(p=>s.add(p[key]||'(空)'));return [...s].sort((a,b)=>String(a).localeCompare(String(b)));}
 
@@ -1006,7 +1009,13 @@ function msSync(id,key){
   if(btn&&btn.firstChild&&btn.firstChild.nodeType===3)
     btn.firstChild.textContent=(sel===0?'未选 ':sel===items.length?'全部 ':'部分 ');
 }
-function buildMS(id,key){msSection(id,key,uniq(key),true);}
+const MS_ORDER={rrclass:['大','中','小','无数据']};
+function buildMS(id,key){
+  let vals=uniq(key);
+  const ord=MS_ORDER[key];
+  if(ord)vals=ord.filter(v=>vals.indexOf(v)>=0).concat(vals.filter(v=>ord.indexOf(v)<0));
+  msSection(id,key,vals,true);
+}
 
 // ===== Operator 单一树形多选：国家（三态）→ 公司（多选）=====
 const opCount={};
@@ -1129,6 +1138,7 @@ function toggleScope(el){const s=el.dataset.scope;el.classList.toggle('on');el.c
 function filtered(){return projects.filter(p=>
   scopes.has(p.scope)&&
   filters.state.has(p.state||'(空)')&&filters.commodity.has(p.commodity||'(空)')&&
+  filters.rrclass.has(p.rrclass||'无数据')&&
   filters.stage.has(p.stage||'(空)')&&filters.status.has(p.status||'(空)')&&
   filters.operator.has(p.operator||'(空)'));}
 
@@ -1265,7 +1275,7 @@ function switchView(v){
   document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b.textContent.includes(v==='map'?'地图':'明细')));
   if(v==='map')map.invalidateSize();else buildTable();
 }
-['state','commodity','stage','status'].forEach(k=>buildMS('ms-'+k,k));
+['state','commodity','rrclass','stage','status'].forEach(k=>buildMS('ms-'+k,k));
 projects.forEach(p=>filters.operator.add(p.operator||'(空)'));   // 默认全选所有公司
 buildOperatorTree();
 refreshCounts();buildLegend();

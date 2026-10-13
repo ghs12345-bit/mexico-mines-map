@@ -1151,7 +1151,7 @@ function popupHtml(p){
   <tr><td>省州</td><td>${esc(p.state||'—')}</td></tr>
   <tr><td>坐标</td><td>${fmtCoord(p.lat)}, ${fmtCoord(p.lon)}</td></tr>${rr}
   <tr><td>尽调目录</td><td>properties/${esc(p.dir)}/</td></tr>
-  </table>${p.history?'<div style="margin-top:5px;font-size:11.5px;color:#374151"><b>历史信息：</b>'+esc(p.history)+'</div>':''}</div>`;
+  </table></div>`;
 }
 let cluster=null,heat=null;
 // 性能改造：全部标记只创建一次，筛选时只切换显隐（不再删/建 DOM）

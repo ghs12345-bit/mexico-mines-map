@@ -968,7 +968,7 @@ const basemaps={
   satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'&copy; Esri',maxZoom:18}),
   light:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{attribution:'&copy; Esri',maxZoom:18}),
   contour:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',{attribution:'&copy; Esri',maxZoom:17})};
-const map=L.map('map',{preferCanvas:false}).setView([23.5,-102],5);
+const map=L.map('map',{preferCanvas:false}).setView([23.5, -102],5);
 basemaps.satellite.addTo(map);let currentBasemap='satellite';
 function switchBasemap(t){map.removeLayer(basemaps[currentBasemap]);basemaps[t].addTo(map);currentBasemap=t;
   document.querySelectorAll('.basemap-tab').forEach(b=>b.classList.toggle('active',b.textContent.includes({'light':'灰底','topo':'地形','satellite':'影像','contour':'自然地理'}[t])));}
@@ -1073,11 +1073,13 @@ function toggleAllOps(on){projects.forEach(p=>{const o=p.operator||'(空)';on?fi
 function filterOpTree(q){
   q=(q||'').trim().toLowerCase();
   document.querySelectorAll('#op-tree .op-group').forEach(w=>{
+    // 修复：国家名命中时，应展示该国全部公司。原实现只按公司名判断 show，
+    // 导致搜索国家名（如 Australia）时该国分组被展开却一家公司都不显示（空分组）。
+    const countryMatch=!q||w.dataset.country.toLowerCase().includes(q);
     let any=false;
     w.querySelectorAll('.op-body .op-item').forEach(it=>{
-      const show=!q||it.dataset.op.toLowerCase().includes(q);
+      const show=!q||countryMatch||it.dataset.op.toLowerCase().includes(q);
       it.style.display=show?'':'none';if(show)any=true;});
-    const countryMatch=!q||w.dataset.country.toLowerCase().includes(q);
     w.style.display=(any||countryMatch)?'':'none';
     if(q&&(any||countryMatch)){w.querySelector('.op-body').style.display='block';w.querySelector('.op-exp').textContent='▾';}
   });
@@ -1089,7 +1091,9 @@ function placeDD(btn,dd){
   dd.style.width=r.width+'px';
   const below=vh-r.bottom-gap-pad, above=r.top-gap-pad;
   const goUp=below<200&&above>below;
-  const maxH=Math.max(140,Math.min(440,goUp?above:below));
+  // 修复：maxH 还要受视口高度约束（vh-2*pad）。否则矮视口下按钮滚出视口时，
+  // 下拉框被夹到 top=pad 但高度仍为 440 → 底部溢出视口，末几项不可达。
+  const maxH=Math.max(140,Math.min(440,goUp?above:below,vh-2*pad));
   dd.style.maxHeight=Math.round(maxH)+'px';
   const h=Math.min(dd.scrollHeight+10,maxH);
   let top=goUp?r.top-gap-h:r.bottom+gap;
@@ -1178,6 +1182,10 @@ function rebuild(){
     allMarkers.forEach(({p,m})=>{if(m._icon)m._icon.style.display=ids.has(p.id)?'':'none';});
   }
   document.getElementById('header-total').textContent=fs.length;
+  // 修复：下拉框「命中数」也必须在唯一渲染入口 rebuild() 内更新。
+  // 原实现只在 refreshCounts()/syncOpTree() 里更新，导致切换范围开关(chip)后
+  // filtered() 已变而 op-foot 仍是旧值（与顶部计数/地图/明细不一致）。
+  {const foot=document.getElementById('op-foot');if(foot)foot.textContent=`当前条件下命中 ${fs.length} 个矿点（与地图/明细同一套过滤）`;}
   document.getElementById('stat-total').textContent=fs.length;
   document.getElementById('stat-operating').textContent=fs.filter(p=>p.stage==='Operating').length;
   document.getElementById('stat-gold').textContent=fs.filter(p=>p.commodity==='Gold').length;
@@ -1224,9 +1232,13 @@ function buildLegend(){
 const tableCols=[["name","矿名"],["commodity","主矿种"],["status","状态"],["stage","阶段"],
  ["rr_num","资源量"],["unit","资源量单位"],["rrclass","资源量档"],
  ["owner_name","拥有者"],["owners_list","权益者"],["state","省州"],
- ["lat","经度"],["lon","纬度"],["history","历史信息"]];
+ // 修复：经度列必须绑 lon、纬度列必须绑 lat（此前两者装反——表头写「经度」却显示纬度值）
+ ["lon","经度"],["lat","纬度"],["history","历史信息"]];
 const NUMCOLS=new Set(["rr_num"]);
 const COORDCOLS=new Set(["lat","lon"]);
+// 修复：数值列排序必须走数值比较。经纬度此前落入字符串分支，localeCompare({numeric:true})
+// 只按“整数段”比较，会把 4.37 排在 4.22693 前、把负经度按绝对值升序 → 排序结果数值错误。
+const SORTNUM=new Set(["rr_num","lat","lon"]);
 let sortKey='name',sortAsc=true;
 function cellVal(p,k){
   if(NUMCOLS.has(k))return fmtInt(p[k]);
@@ -1236,7 +1248,7 @@ function cellVal(p,k){
 function buildTable(){
   const rows=[...filtered()];
   rows.sort((a,b)=>{const va=a[sortKey]??'',vb=b[sortKey]??'';
-    if(NUMCOLS.has(sortKey))return sortAsc?(Number(va)||0)-(Number(vb)||0):(Number(vb)||0)-(Number(va)||0);
+    if(SORTNUM.has(sortKey))return sortAsc?(Number(va)||0)-(Number(vb)||0):(Number(vb)||0)-(Number(va)||0);
     return sortAsc?String(va).localeCompare(String(vb),undefined,{numeric:true}):String(vb).localeCompare(String(va),undefined,{numeric:true});});
   let h='<table><thead><tr>'+tableCols.map(c=>`<th onclick="sortBy('${c[0]}')">${c[1]}${sortKey===c[0]?(sortAsc?' ▲':' ▼'):''}</th>`).join('')+'</tr></thead><tbody>';
   rows.forEach(p=>{h+='<tr>'+tableCols.map(c=>{
